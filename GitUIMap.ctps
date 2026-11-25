@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CONFIG>
+  <ProjectSession>
+    <PathDelim Value="\"/>
+    <Version Value="12"/>
+    <BuildModes Active="Default"/>
+    <Units>
+      <Unit>
+        <Filename Value="GitUIMap.ppr"/>
+        <FRMtype Value="0"/>
+        <IsPartOfProject Value="True"/>
+        <EditorIndex Value="-1"/>
+        <WindowIndex Value="0"/>
+        <CursorPos Y="24"/>
+        <UsageCount Value="22"/>
+      </Unit>
+      <Unit>
+        <Filename Value="GitUIMapMainForm.pas"/>
+        <FRMtype Value="200"/>
+        <IsPartOfProject Value="True"/>
+        <ComponentName Value="frmGitUIMapMain"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+        <IsVisibleTab Value="True"/>
+        <EditorIndex Value="0"/>
+        <WindowIndex Value="0"/>
+        <CursorPos X="38" Y="9"/>
+        <UsageCount Value="22"/>
+        <Loaded Value="True"/>
+        <LoadedDesigner Value="True"/>
+      </Unit>
+      <Unit>
+        <Filename Value="C:\codetyphon\fpcsrc\rtl\objpas\sysutils\sysutilh.inc"/>
+        <FRMtype Value="0"/>
+        <EditorIndex Value="-1"/>
+        <WindowIndex Value="0"/>
+        <TopLine Value="126"/>
+        <CursorPos X="16" Y="139"/>
+        <UsageCount Value="10"/>
+      </Unit>
+      <Unit>
+        <Filename Value="C:\codetyphon\fpcsrc\rtl\win\sysutils.pp"/>
+        <FRMtype Value="0"/>
+        <UnitName Value="SysUtils"/>
+        <EditorIndex Value="-1"/>
+        <WindowIndex Value="0"/>
+        <TopLine Value="124"/>
+        <CursorPos X="16" Y="139"/>
+        <UsageCount Value="10"/>
+      </Unit>
+    </Units>
+    <Debugger>
+      <Backend Value="{DB9F04B0-0A5B-44F9-B302-3B0BEB854719}"/>
+    </Debugger>
+    <JumpHistory HistoryIndex="9">
+      <Position>
+        <Filename Value="GitUIMapMainForm.pas"/>
+      </Position>
+      <Position>
+        <Filename Value="GitUIMapMainForm.pas"/>
+        <Caret Line="50" Column="28" TopLine="29"/>
+      </Position>
+      <Position>
+        <Filename Value="GitUIMapMainForm.pas"/>
+        <Caret Line="42" Column="27" TopLine="19"/>
+      </Position>
+      <Position>
+        <Filename Value="GitUIMapMainForm.pas"/>
+        <Caret Line="129" Column="9" TopLine="110"/>
+      </Position>
+      <Position>
+        <Filename Value="GitUIMapMainForm.pas"/>
+        <Caret Line="167" Column="7" TopLine="148"/>
+      </Position>
+      <Position>
+        <Filename Value="GitUIMapMainForm.pas"/>
+        <Caret Line="175" Column="34" TopLine="160"/>
+      </Position>
+      <Position>
+        <Filename Value="GitUIMapMainForm.pas"/>
+        <Caret Line="176" Column="9" TopLine="161"/>
+      </Position>
+      <Position>
+        <Filename Value="GitUIMapMainForm.pas"/>
+        <Caret Line="178" Column="28" TopLine="161"/>
+      </Position>
+      <Position>
+        <Filename Value="GitUIMapMainForm.pas"/>
+        <Caret Line="113" TopLine="105"/>
+      </Position>
+      <Position>
+        <Filename Value="GitUIMapMainForm.pas"/>
+        <Caret Line="112" Column="59" TopLine="102"/>
+      </Position>
+    </JumpHistory>
+    <RunParams>
+      <FormatVersion Value="2"/>
+      <Modes ActiveMode=""/>
+    </RunParams>
+  </ProjectSession>
+  <Debugging>
+    <BreakPoints>
+      <Item>
+        <Kind Value="bpkSource"/>
+        <WatchScope Value="wpsLocal"/>
+        <WatchKind Value="wpkWrite"/>
+        <Source Value="GitUIMapMainForm.pas"/>
+        <Line Value="113"/>
+      </Item>
+    </BreakPoints>
+  </Debugging>
+</CONFIG>
