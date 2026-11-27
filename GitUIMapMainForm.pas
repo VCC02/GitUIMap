@@ -29,8 +29,8 @@ unit GitUIMapMainForm;
 interface
 
 uses
-  LCLType, Classes, SysUtils, Forms, Controls, Graphics, Dialogs, ExtCtrls, StdCtrls,
-  VirtualTrees;
+  LCLType, Classes, SysUtils, Forms, Controls, Graphics, Dialogs, ExtCtrls,
+  StdCtrls, ComCtrls, VirtualTrees, GitUIMapPlugins;
 
 type
   TCommit = record
@@ -43,6 +43,15 @@ type
 
   TCommitArr = array of TCommit;
 
+  TPlugin = record
+    PluginHandle: THandle;
+    InitPluginProc: TInitPlugin;
+    ExecPluginProc: TExecPlugin;
+    DonePluginProc: TDonePlugin;
+  end;
+
+  TPluginArr = array of TPlugin;
+
 
   { TfrmGitUIMapMain }
 
@@ -50,6 +59,7 @@ type
     btnBrowseRepo: TButton;
     btnGetMap: TButton;
     btnPlugins: TButton;
+    btnBatchRun: TButton;
     grpBatchExecution: TGroupBox;
     lblCommands: TLabel;
     lblCommits: TLabel;
@@ -57,10 +67,12 @@ type
     lblFiles: TLabel;
     memLog: TMemo;
     memCommands: TMemo;
+    prbBatchRun: TProgressBar;
     rdgrpBatchExecDir: TRadioGroup;
     SelectDirectoryDialog1: TSelectDirectoryDialog;
     vstFiles: TVirtualStringTree;
     vstMap: TVirtualStringTree;
+    procedure btnBatchRunClick(Sender: TObject);
     procedure btnBrowseRepoClick(Sender: TObject);
     procedure btnGetMapClick(Sender: TObject);
     procedure btnPluginsClick(Sender: TObject);
@@ -79,9 +91,12 @@ type
     FListOfPlugins: TStringList;
 
     procedure AddToLog(AMsg: string);
-    procedure ExecGit(AGitParams, AGitOutput: TStringList);
     procedure GetMap;
+    procedure GetFilesPerCommit(ACommitShortHash: string; AListOfFiles: TStringList);
     procedure GetCommitFiles(ACommitShortHash: string);
+    function GetPluginIndexByName(APluginName: string): Integer;
+    procedure ExecPlugin(var AAllPlugins: TPluginArr; APluginName: string; ACommitIdx: Integer);
+    procedure ExecuteAllCommands(var AAllPlugins: TPluginArr; ACommitIndex: Integer);
   public
 
   end;
@@ -91,6 +106,7 @@ var
 
 {ToDo:
   - be able to check out a specific commit: "git switch --detach <commit-hash>" or "git checkout <commit-hash>"
+  - Load/Save settings
 }
 
 implementation
@@ -98,7 +114,7 @@ implementation
 {$R *.frm}
 
 uses
-  Process, GitUIMapPluginsForm;
+  GitUIMapPluginsForm, GitUIMapUtils;
 
 const
   CParamDelim = '||||';
@@ -112,85 +128,15 @@ begin
 end;
 
 
-procedure TfrmGitUIMapMain.ExecGit(AGitParams, AGitOutput: TStringList);
-var
-  Prc: TProcess;
-  TempBuffer: array of Byte;
-  MemStream: TMemoryStream;
-  tk: QWord;
+procedure LocalAddToLog(AMsg: string);
 begin
-  Prc := TProcess.Create(nil);
-  try
-    Prc.Executable := 'git';
+  frmGitUIMapMain.AddToLog(AMsg);
+end;
 
-    Prc.CurrentDirectory := lbeRepoPath.Text;
-    if Prc.CurrentDirectory = '' then
-      Prc.CurrentDirectory := ExtractFileDir(Prc.CurrentDirectory);
 
-    Prc.Parameters.Assign(AGitParams);
-    Prc.Options := [poUsePipes, poStderrToOutPut, poNoConsole];
-
-    Prc.Execute;
-    MemStream := TMemoryStream.Create;
-    try
-      tk := GetTickCount64;
-      repeat
-        Application.ProcessMessages;
-        Sleep(10);
-
-        //Wait a bit for output
-        if (Prc.Output <> nil) and (Prc.Output.NumBytesAvailable > 0) then
-          Break;
-      until (GetTickCount64 - tk > 500);
-
-      repeat
-        if (Prc.Output <> nil) and (Prc.Output.NumBytesAvailable > 0) then
-        begin
-          SetLength(TempBuffer, Prc.Output.NumBytesAvailable);
-          if Length(TempBuffer) > 0 then
-          begin
-            Prc.Output.Read(TempBuffer[0], Length(TempBuffer));
-            MemStream.Write(TempBuffer[0], Length(TempBuffer));
-          end;
-        end;
-
-        Application.ProcessMessages;
-        Sleep(10);
-      until not Prc.Active;
-
-      Sleep(200);
-
-      //Verify again, maybe there is more content left:
-      if (Prc.Output <> nil) and (Prc.Output.NumBytesAvailable > 0) then
-      begin
-        SetLength(TempBuffer, Prc.Output.NumBytesAvailable);
-        if Length(TempBuffer) > 0 then
-        begin
-          Prc.Output.Read(TempBuffer[0], Length(TempBuffer));
-          MemStream.Write(TempBuffer[0], Length(TempBuffer));
-        end;
-      end;
-
-      MemStream.Position := 0;
-      AGitOutput.LoadFromStream(MemStream);
-
-      if AGitOutput.Count = 0 then
-      begin
-        AddToLog('Git output is empty.');
-        Exit;
-      end;
-
-      if Pos('fatal: not a git repository', AGitOutput.Strings[0]) > 0 then
-      begin
-        AddToLog('Error getting list of commits. ' + AGitOutput.Strings[0]);
-        Exit;
-      end;
-    finally
-      MemStream.Free;
-    end;
-  finally
-    Prc.Free;
-  end;
+procedure AppProcMsg;
+begin
+  Application.ProcessMessages;
 end;
 
 
@@ -211,7 +157,7 @@ begin
     GitParams.Add('--pretty=format:''%h' + CParamDelim + '%ad' + CParamDelim + '%an' + CParamDelim + '%ae' + CParamDelim + '%s''');
     GitParams.Add('--date=iso');
 
-    ExecGit(GitParams, GitOutput);
+    ExecGit(lbeRepoPath.Text, GitParams, GitOutput, @LocalAddToLog, @AppProcMsg);
 
     if GitOutput.Count = 0 then
       Exit;
@@ -255,14 +201,10 @@ begin
 end;
 
 
-procedure TfrmGitUIMapMain.GetCommitFiles(ACommitShortHash: string);
+procedure TfrmGitUIMapMain.GetFilesPerCommit(ACommitShortHash: string; AListOfFiles: TStringList);
 var
   GitParams, GitOutput: TStringList;
-  i: Integer;
 begin
-  vstFiles.RootNodeCount := 0;
-  SetLength(FFilesPerCommit, 0);
-
   GitOutput := TStringList.Create;
   GitParams := TStringList.Create;
   try
@@ -273,7 +215,7 @@ begin
     //GitParams.Add('-z');
     GitParams.Add(ACommitShortHash);
 
-    ExecGit(GitParams, GitOutput);
+    ExecGit(lbeRepoPath.Text, GitParams, GitOutput, @LocalAddToLog, @AppProcMsg);
 
     if GitOutput.Count = 0 then
       Exit;
@@ -282,12 +224,31 @@ begin
     //AddToLog('Git output:');
     //AddToLog(#13#10 + GitOutput.Text);
 
-    SetLength(FFilesPerCommit, GitOutput.Count);
-    for i := 0 to Length(FFilesPerCommit) - 1 do
-      FFilesPerCommit[i] := GitOutput.Strings[i];
+    AListOfFiles.Assign(GitOutput);
   finally
     GitOutput.Free;
     GitParams.Free;
+  end;
+end;
+
+
+procedure TfrmGitUIMapMain.GetCommitFiles(ACommitShortHash: string);
+var
+  i: Integer;
+  ListOfFiles: TStringList;
+begin
+  vstFiles.RootNodeCount := 0;
+  SetLength(FFilesPerCommit, 0);
+
+  ListOfFiles := TStringList.Create;
+  try
+    GetFilesPerCommit(ACommitShortHash, ListOfFiles);
+
+    SetLength(FFilesPerCommit, ListOfFiles.Count);
+      for i := 0 to Length(FFilesPerCommit) - 1 do
+        FFilesPerCommit[i] := ListOfFiles.Strings[i];
+  finally
+    ListOfFiles.Free;
   end;
 
   vstFiles.RootNodeCount := Length(FFilesPerCommit);
@@ -307,6 +268,277 @@ begin
     lbeRepoPath.Text := SelDir.FileName;
   finally
     SelDir.Free;
+  end;
+end;
+
+
+function TfrmGitUIMapMain.GetPluginIndexByName(APluginName: string): Integer; //index of - without case sensitive, without path, without ext
+var
+  i: Integer;
+  FileNameOnly: string;
+begin
+  Result := -1;
+  APluginName := UpperCase(APluginName);
+  if Pos('.', APluginName) > 0 then
+    Delete(APluginName, Pos('.', APluginName), MaxInt);   //remove extension, just in case
+
+  for i := 0 to FListOfPlugins.Count - 1 do
+  begin
+    FileNameOnly := UpperCase(ExtractFileName(FListOfPlugins.Strings[i]));
+    if Pos('.', FileNameOnly) > 0 then
+      Delete(FileNameOnly, Pos('.', FileNameOnly), MaxInt);   //remove extension, just in case
+
+    if FileNameOnly = APluginName then
+    begin
+      Result := i;
+      Exit;
+    end;
+  end;
+end;
+
+
+procedure PluginOutputCallback(AAOutput: Pointer; AAOutputLen: DWord); cdecl;
+var
+  s: string;
+begin
+  if AAOutputLen > 10000000 then
+    AAOutputLen := 10000000;
+
+  SetLength(s, AAOutputLen);
+  Move(AAOutput^, s[1], AAOutputLen);
+
+  LocalAddToLog('[Plugin]: ' + s);
+end;
+
+
+procedure TfrmGitUIMapMain.ExecPlugin(var AAllPlugins: TPluginArr; APluginName: string; ACommitIdx: Integer);
+var
+  Idx: Integer;
+  Repo, ListOfFilesStr: string;
+  ListOfFiles: TStringList;
+begin
+  Idx := GetPluginIndexByName(APluginName);
+  if Idx = -1 then
+  begin
+    AddToLog('Error executing plugin "' + APluginName + '". It can''t be found by name. Plese verify the name and format.');
+    Exit;
+  end;
+
+  Repo := lbeRepoPath.Text;
+
+  ListOfFiles := TStringList.Create;
+  try
+    GetFilesPerCommit(FCommits[ACommitIdx].ID, ListOfFiles);
+    ListOfFilesStr := ListOfFiles.Text;
+
+    AAllPlugins[Idx].ExecPluginProc(@Repo[1], Length(Repo),
+                                    @FCommits[ACommitIdx].ID, Length(FCommits[ACommitIdx].ID),
+                                    @FCommits[ACommitIdx].Timestamp, Length(FCommits[ACommitIdx].Timestamp),
+                                    @FCommits[ACommitIdx].Author, Length(FCommits[ACommitIdx].Author),
+                                    @FCommits[ACommitIdx].EMail, Length(FCommits[ACommitIdx].EMail),
+                                    @FCommits[ACommitIdx].Message, Length(FCommits[ACommitIdx].Message),
+                                    @ListOfFilesStr, Length(ListOfFilesStr), @PluginOutputCallback);
+
+  finally
+    ListOfFiles.Free;
+  end;
+end;
+
+
+procedure TfrmGitUIMapMain.ExecuteAllCommands(var AAllPlugins: TPluginArr; ACommitIndex: Integer);
+var
+  i, j: Integer;
+  TempCmd, s, PluginName: string;
+  AppParams, AppParamsBlanks, AppOutput: TStringList;
+begin
+  for i := 0 to memCommands.Lines.Count - 1 do
+  begin
+    s := memCommands.Lines.Strings[i];
+    if s = '' then
+      Continue;
+
+    if Pos('PLUGIN.', UpperCase(s)) = 1 then
+    begin
+      PluginName := Copy(s, Length('PLUGIN.') + 1, MaxInt);
+      ExecPlugin(AAllPlugins, PluginName, ACommitIndex);
+    end
+    else
+    begin  //plain command
+      if Pos(' ', s) > 0 then
+        TempCmd := Copy(s, 1, Pos(' ', s) - 1)
+      else
+        TempCmd := s;
+
+      AppParams := TStringList.Create;
+      AppParamsBlanks := TStringList.Create;
+      AppOutput := TStringList.Create;
+      try
+        AppParamsBlanks.LineBreak := ' '; //empty items will result if there are "multi-blanks", like '  ' or '   ' etc.
+        if Pos(' ', s) > 0 then
+        begin
+          AppParamsBlanks.Text := Copy(s, Pos(' ', s) + 1, MaxInt);
+
+          for j := 0 to AppParamsBlanks.Count - 1 do
+            AppParams.Add(AppParamsBlanks.Strings[j]); //convert from #32 to #13#10 (or #10)
+        end;
+
+        try
+          AddToLog('[App ' + TempCmd + ' params (' + IntToStr(AppParams.Count) + ')]: ' + AppParams.Text);
+          ExecApp(TempCmd, lbeRepoPath.Text, AppParams, AppOutput, @AppProcMsg);
+          AddToLog('[App ' + TempCmd + ']: ' + AppOutput.Text);
+        except
+          on E: Exception do
+            AddToLog('[App ' + TempCmd + ' ex]: ' + E.Message);
+        end;
+      finally
+        AppParams.Free;
+        AppParamsBlanks.Free;
+        AppOutput.Free;
+      end;
+    end;
+  end;
+end;
+
+
+procedure TfrmGitUIMapMain.btnBatchRunClick(Sender: TObject);
+var
+  AllPlugins: TPluginArr;
+  FailedLoading: Boolean;
+  i: Integer;
+
+  procedure UnloadAllPlugins;
+  var
+    i: Integer;
+  begin
+    for i := 0 to Length(AllPlugins) - 1 do
+      if AllPlugins[i].PluginHandle <> 0 then
+        FreeLibrary(AllPlugins[i].PluginHandle);
+  end;
+begin
+  btnBatchRun.Enabled := False;
+  try
+    SetLength(AllPlugins, FListOfPlugins.Count);
+    for i := 0 to Length(AllPlugins) - 1 do
+      AllPlugins[i].PluginHandle := 0;
+
+    FailedLoading := False;
+    for i := 0 to Length(AllPlugins) - 1 do
+    begin
+      if not FileExists(FListOfPlugins.Strings[i]) then
+      begin
+        FailedLoading := True;
+        AddToLog('Plugin not found at: ' + FListOfPlugins.Strings[i]);
+        Break;
+      end;
+
+      AllPlugins[i].PluginHandle := LoadLibrary(FListOfPlugins.Strings[i]);
+      if AllPlugins[i].PluginHandle = 0 then
+      begin
+        FailedLoading := True;
+        AddToLog('Error loading plugin at: ' + FListOfPlugins.Strings[i]);
+        Break;
+      end;
+    end;
+
+    if FailedLoading then
+    begin
+      UnloadAllPlugins;
+      Exit;
+    end;
+
+    for i := 0 to Length(AllPlugins) - 1 do
+    begin
+      AllPlugins[i].InitPluginProc := TInitPlugin(GetProcAddress(AllPlugins[i].PluginHandle, 'InitPlugin'));
+      AllPlugins[i].ExecPluginProc := TExecPlugin(GetProcAddress(AllPlugins[i].PluginHandle, 'ExecPlugin'));
+      AllPlugins[i].DonePluginProc := TDonePlugin(GetProcAddress(AllPlugins[i].PluginHandle, 'DonePlugin'));
+
+      if AllPlugins[i].InitPluginProc = nil then
+      begin
+        AddToLog('Error getting address of InitPlugin at ' + FListOfPlugins.Strings[i]);
+        FailedLoading := True;
+        Break;
+      end;
+
+      if AllPlugins[i].ExecPluginProc = nil then
+      begin
+        AddToLog('Error getting address of ExecPlugin at ' + FListOfPlugins.Strings[i]);
+        FailedLoading := True;
+        Break;
+      end;
+
+      if AllPlugins[i].DonePluginProc = nil then
+      begin
+        AddToLog('Error getting address of DonePlugin at ' + FListOfPlugins.Strings[i]);
+        FailedLoading := True;
+        Break;
+      end;
+    end;
+
+    if FailedLoading then
+    begin
+      UnloadAllPlugins;
+      Exit;
+    end;
+
+    for i := 0 to Length(AllPlugins) - 1 do
+    begin
+      try
+        AllPlugins[i].InitPluginProc;
+      except
+        on E: Exception do
+        begin
+          AddToLog('Error initializing plugin at ' + FListOfPlugins.Strings[i]);
+          FailedLoading := True;
+          Break;
+        end;
+      end;
+    end;
+
+    if FailedLoading then
+    begin
+      UnloadAllPlugins;
+      Exit;
+    end;
+
+    try
+      try
+        prbBatchRun.Max := Length(FCommits);
+
+        if rdgrpBatchExecDir.ItemIndex = 1 then  //last commit to first
+        begin
+          for i := 0 to Length(FCommits) - 1 do   //last commit is at index 0
+          begin
+            ExecuteAllCommands(AllPlugins, i);
+            prbBatchRun.Position := i;
+          end;
+        end
+        else                                     //first commit to last
+        begin
+          for i := Length(FCommits) - 1 downto 0 do   //last commit is at index 0
+          begin
+            ExecuteAllCommands(AllPlugins, i);
+            prbBatchRun.Position := prbBatchRun.Max - i + 1;
+          end;
+        end;
+      finally
+        for i := 0 to Length(AllPlugins) - 1 do
+        begin
+          try
+            AllPlugins[i].DonePluginProc;
+          except
+            on E: Exception do
+            begin
+              AddToLog('Error finalizing plugin at ' + FListOfPlugins.Strings[i]);
+              //Break;  //Do not break, continue with the oters.
+            end;
+          end;
+        end;
+      end;
+    finally
+      UnloadAllPlugins;
+    end;
+  finally
+    btnBatchRun.Enabled := True;
   end;
 end;
 
@@ -351,11 +583,6 @@ begin
   SetLength(FCommits, 0);
   SetLength(FFilesPerCommit, 0);
   FListOfPlugins := TStringList.Create;
-
-  FListOfPlugins.Add('abc');
-  FListOfPlugins.Add('def');
-  FListOfPlugins.Add('ghi');
-  FListOfPlugins.Add('jkl');
 end;
 
 

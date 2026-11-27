@@ -189,10 +189,16 @@ object frmGitUIMapMain: TfrmGitUIMapMain
     object memCommands: TMemo
       Left = 184
       Height = 64
-      Hint = 'Please type one command per line. It is usually <tool_name [list of arguments]>'#13#10#13#10'To call a plugin, tpye on a new line: "Plugin.<plugin name>" (without quotes and without arguments).'#13#10'The plugin name should be the file name without path and without extension (not case sensitive), and must be in the list of installed plugins.'#13#10'All the installed plugins are initialized before the batch execution, regardless of them being called or not, then finalized after execution.'#13#10'Every plugin receives the repository path, commit ID (hash), timestamp, author, e-mail, message and list of files.'#13#10#13#10'All the other lines are used as command lines.'
+      Hint = 'Please type one command per line. It is usually <tool_name [list of arguments]>'#13#10#13#10'To call a plugin, tpye on a new line: "Plugin.<plugin name>" (without quotes, without path and extension, and without arguments).'#13#10'The plugin name should be the file name without path and without extension (not case sensitive), and must be in the list of installed plugins.'#13#10'All the installed plugins are initialized before the batch execution, regardless of them being called or not, then finalized after execution.'#13#10'Every plugin receives the repository path, commit ID (hash), timestamp, author, e-mail, message and list of files.'#13#10#13#10'All the other lines are used as command lines.'
       Top = 16
-      Width = 192
+      Width = 224
       Anchors = [akLeft, akRight, akBottom]
+      Font.CharSet = ANSI_CHARSET
+      Font.Height = -13
+      Font.Name = 'Courier New'
+      Font.Pitch = fpFixed
+      Font.Quality = fqDraft
+      ParentFont = False
       ParentShowHint = False
       ScrollBars = ssBoth
       ShowHint = True
@@ -206,6 +212,25 @@ object frmGitUIMapMain: TfrmGitUIMapMain
       Width = 62
       Caption = 'Commands'
     end
+  end
+  object btnBatchRun: TButton
+    Left = 949
+    Height = 25
+    Top = 40
+    Width = 75
+    Anchors = [akTop, akRight]
+    Caption = 'Batch run'
+    TabOrder = 8
+    OnClick = btnBatchRunClick
+  end
+  object prbBatchRun: TProgressBar
+    Left = 888
+    Height = 20
+    Top = 66
+    Width = 136
+    Anchors = [akTop, akRight]
+    Smooth = True
+    TabOrder = 9
   end
   object SelectDirectoryDialog1: TSelectDirectoryDialog
     Left = 494
