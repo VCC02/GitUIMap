@@ -64,6 +64,7 @@ begin
 
     Prc.Parameters.Assign(AAppParams);
     Prc.Options := [poUsePipes, poStderrToOutPut, poNoConsole];
+    Prc.InheritHandles := True;
 
     Prc.Execute;
     MemStream := TMemoryStream.Create;

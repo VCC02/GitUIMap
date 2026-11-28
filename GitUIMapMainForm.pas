@@ -386,12 +386,12 @@ begin
     ListOfFilesStr := ListOfFiles.Text;
 
     AAllPlugins[Idx].ExecPluginProc(@Repo[1], Length(Repo),
-                                    @FCommits[ACommitIdx].ID, Length(FCommits[ACommitIdx].ID),
-                                    @FCommits[ACommitIdx].Timestamp, Length(FCommits[ACommitIdx].Timestamp),
-                                    @FCommits[ACommitIdx].Author, Length(FCommits[ACommitIdx].Author),
-                                    @FCommits[ACommitIdx].EMail, Length(FCommits[ACommitIdx].EMail),
-                                    @FCommits[ACommitIdx].Message, Length(FCommits[ACommitIdx].Message),
-                                    @ListOfFilesStr, Length(ListOfFilesStr), @PluginOutputCallback);
+                                    @FCommits[ACommitIdx].ID[1], Length(FCommits[ACommitIdx].ID),
+                                    @FCommits[ACommitIdx].Timestamp[1], Length(FCommits[ACommitIdx].Timestamp),
+                                    @FCommits[ACommitIdx].Author[1], Length(FCommits[ACommitIdx].Author),
+                                    @FCommits[ACommitIdx].EMail[1], Length(FCommits[ACommitIdx].EMail),
+                                    @FCommits[ACommitIdx].Message[1], Length(FCommits[ACommitIdx].Message),
+                                    @ListOfFilesStr[1], Length(ListOfFilesStr), @PluginOutputCallback);
 
   finally
     ListOfFiles.Free;
