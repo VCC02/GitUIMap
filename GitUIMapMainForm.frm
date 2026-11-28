@@ -9,6 +9,7 @@ object frmGitUIMapMain: TfrmGitUIMapMain
   Constraints.MinHeight = 397
   Constraints.MinWidth = 1033
   LCLVersion = '8.4'
+  OnClose = FormClose
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   object lbeRepoPath: TLabeledEdit
@@ -231,6 +232,24 @@ object frmGitUIMapMain: TfrmGitUIMapMain
     Anchors = [akTop, akRight]
     Smooth = True
     TabOrder = 9
+  end
+  object btnLoadProject: TButton
+    Left = 608
+    Height = 25
+    Top = 8
+    Width = 104
+    Caption = 'Load project...'
+    TabOrder = 10
+    OnClick = btnLoadProjectClick
+  end
+  object btnSaveProject: TButton
+    Left = 720
+    Height = 25
+    Top = 8
+    Width = 104
+    Caption = 'Save project...'
+    TabOrder = 11
+    OnClick = btnSaveProjectClick
   end
   object SelectDirectoryDialog1: TSelectDirectoryDialog
     Left = 494

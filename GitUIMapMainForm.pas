@@ -60,6 +60,8 @@ type
     btnGetMap: TButton;
     btnPlugins: TButton;
     btnBatchRun: TButton;
+    btnLoadProject: TButton;
+    btnSaveProject: TButton;
     grpBatchExecution: TGroupBox;
     lblCommands: TLabel;
     lblCommits: TLabel;
@@ -75,7 +77,10 @@ type
     procedure btnBatchRunClick(Sender: TObject);
     procedure btnBrowseRepoClick(Sender: TObject);
     procedure btnGetMapClick(Sender: TObject);
+    procedure btnLoadProjectClick(Sender: TObject);
     procedure btnPluginsClick(Sender: TObject);
+    procedure btnSaveProjectClick(Sender: TObject);
+    procedure FormClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure vstFilesGetText(Sender: TBaseVirtualTree; Node: PVirtualNode;
@@ -91,6 +96,9 @@ type
     FListOfPlugins: TStringList;
 
     procedure AddToLog(AMsg: string);
+    procedure LoadSettingsFromIni;
+    procedure SaveSettingsToIni;
+
     procedure GetMap;
     procedure GetFilesPerCommit(ACommitShortHash: string; AListOfFiles: TStringList);
     procedure GetCommitFiles(ACommitShortHash: string);
@@ -106,7 +114,7 @@ var
 
 {ToDo:
   - be able to check out a specific commit: "git switch --detach <commit-hash>" or "git checkout <commit-hash>"
-  - Load/Save settings
+  - Stop batch button
 }
 
 implementation
@@ -114,7 +122,7 @@ implementation
 {$R *.frm}
 
 uses
-  GitUIMapPluginsForm, GitUIMapUtils;
+  GitUIMapPluginsForm, GitUIMapUtils, IniFiles;
 
 const
   CParamDelim = '||||';
@@ -137,6 +145,51 @@ end;
 procedure AppProcMsg;
 begin
   Application.ProcessMessages;
+end;
+
+
+procedure TfrmGitUIMapMain.LoadSettingsFromIni;
+var
+  Ini: TMemIniFile;
+  i, n: Integer;
+begin
+  Ini := TMemIniFile.Create(ExtractFilePath(ParamStr(0)) + 'GetUIMap.ini');
+  try
+    Left := Ini.ReadInteger('Settings', 'Left', Left);
+    Top := Ini.ReadInteger('Settings', 'Top', Top);
+    Width := Ini.ReadInteger('Settings', 'Width', Width);
+    Height := Ini.ReadInteger('Settings', 'Height', Height);
+
+    FListOfPlugins.Clear;
+    n := Ini.ReadInteger('Plugins', 'Count', 0);
+    for i := 0 to n - 1 do
+      FListOfPlugins.Add(Ini.ReadString('Plugins', 'Plugin_' + IntToStr(i), ''));
+  finally
+    Ini.Free;
+  end;
+end;
+
+
+procedure TfrmGitUIMapMain.SaveSettingsToIni;
+var
+  Ini: TMemIniFile;
+  i: Integer;
+begin
+  Ini := TMemIniFile.Create(ExtractFilePath(ParamStr(0)) + 'GetUIMap.ini');
+  try
+    Ini.WriteInteger('Settings', 'Left', Left);
+    Ini.WriteInteger('Settings', 'Top', Top);
+    Ini.WriteInteger('Settings', 'Width', Width);
+    Ini.WriteInteger('Settings', 'Height', Height);
+
+    Ini.WriteInteger('Plugins', 'Count', FListOfPlugins.Count);
+    for i := 0 to FListOfPlugins.Count - 1 do
+      Ini.WriteString('Plugins', 'Plugin_' + IntToStr(i), FListOfPlugins.Strings[i]);
+
+    Ini.UpdateFile;
+  finally
+    Ini.Free;
+  end;
 end;
 
 
@@ -328,6 +381,7 @@ begin
 
   ListOfFiles := TStringList.Create;
   try
+    ListOfFiles.LineBreak := #13#10; //required by plugins for #4#5 conversion
     GetFilesPerCommit(FCommits[ACommitIdx].ID, ListOfFiles);
     ListOfFilesStr := ListOfFiles.Text;
 
@@ -571,6 +625,70 @@ begin
 end;
 
 
+procedure TfrmGitUIMapMain.btnLoadProjectClick(Sender: TObject);
+var
+  Ini: TMemIniFile;
+  i, n: Integer;
+  OpenDialog: TOpenDialog;
+begin
+  OpenDialog := TOpenDialog.Create(nil);
+  try
+    OpenDialog.Filter := 'GitUIMap projects (*.gmap)|*.gmap|All files (*.*)|*.*';
+    if not OpenDialog.Execute then
+      Exit;
+
+    Ini := TMemIniFile.Create(OpenDialog.FileName);
+    try
+      lbeRepoPath.Text := Ini.ReadString('Exec', 'RepoPath', '');
+      rdgrpBatchExecDir.ItemIndex := Ini.ReadInteger('Exec', 'BatchExecDir', rdgrpBatchExecDir.ItemIndex);
+
+      memCommands.Lines.Clear;
+      n := Ini.ReadInteger('Commands', 'Count', 0);
+      for i := 0 to n - 1 do
+        memCommands.Lines.Add(Ini.ReadString('Commands', 'Cmd_' + IntToStr(i), ''));
+    finally
+      Ini.Free;
+    end;
+  finally
+    OpenDialog.Free;
+  end;
+end;
+
+
+procedure TfrmGitUIMapMain.btnSaveProjectClick(Sender: TObject);
+var
+  Ini: TMemIniFile;
+  i: Integer;
+  SaveDialog: TSaveDialog;
+begin
+  SaveDialog := TSaveDialog.Create(nil);
+  try
+    SaveDialog.Filter := 'GitUIMap projects (*.gmap)|*.gmap|All files (*.*)|*.*';
+    if not SaveDialog.Execute then
+      Exit;
+
+    if ExtractFileExt(SaveDialog.FileName) = '' then
+      SaveDialog.FileName := SaveDialog.FileName + '.gmap';
+
+    Ini := TMemIniFile.Create(SaveDialog.FileName);
+    try
+      Ini.WriteString('Exec', 'RepoPath', lbeRepoPath.Text);
+      Ini.WriteInteger('Exec', 'BatchExecDir', rdgrpBatchExecDir.ItemIndex);
+
+      Ini.WriteInteger('Commands', 'Count', memCommands.Lines.Count);
+      for i := 0 to memCommands.Lines.Count - 1 do
+        Ini.WriteString('Commands', 'Cmd_' + IntToStr(i), memCommands.Lines.Strings[i]);
+
+      Ini.UpdateFile;
+    finally
+      Ini.Free;
+    end;
+  finally
+    SaveDialog.Free;
+  end;
+end;
+
+
 procedure TfrmGitUIMapMain.btnPluginsClick(Sender: TObject);
 begin
   if not EditPlugins(FListOfPlugins) then
@@ -578,17 +696,28 @@ begin
 end;
 
 
+
+
 procedure TfrmGitUIMapMain.FormCreate(Sender: TObject);
 begin
   SetLength(FCommits, 0);
   SetLength(FFilesPerCommit, 0);
   FListOfPlugins := TStringList.Create;
+
+  LoadSettingsFromIni;
 end;
 
 
 procedure TfrmGitUIMapMain.FormDestroy(Sender: TObject);
 begin
   FreeAndNil(FListOfPlugins);
+end;
+
+
+procedure TfrmGitUIMapMain.FormClose(Sender: TObject;
+  var CloseAction: TCloseAction);
+begin
+  SaveSettingsToIni;
 end;
 
 

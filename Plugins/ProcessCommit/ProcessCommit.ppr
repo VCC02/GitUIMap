@@ -1,0 +1,175 @@
+{
+    Copyright (C) 2026 VCC
+    creation date: 28 Nov 2026
+    initial release date: 28 Nov 2026
+
+    author: VCC
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"),
+    to deal in the Software without restriction, including without limitation
+    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+    and/or sell copies of the Software, and to permit persons to whom the
+    Software is furnished to do so, subject to the following conditions:
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Software.
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
+    OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+}
+
+
+library ProcessCommit;
+
+{$mode objfpc}{$H+}
+
+uses
+  SysUtils, Classes,
+  GitUIMapPlugins,
+  IdHTTP;
+
+threadvar
+  GIdHTTP: TIdHTTP;
+  ErrOutput: string;
+
+const
+  CAddress = '127.0.0.1';
+  CPort = '54831';
+
+
+procedure InitPlugin; cdecl;
+begin
+  GIdHTTP := TIdHTTP.Create(nil);
+  try
+    GIdHTTP.Get('http://' + CAddress + ':' + CPort + '/InitPlugin');
+  except
+    on E: Exception do
+      ErrOutput := E.Message;
+  end;
+end;
+
+
+{#13#10 -> #4#5}
+function FastReplace_ReturnTo45(s: string): string;
+var
+  i, n: Integer;
+begin
+  n := Pos(#13, s);
+  if n = 0 then
+  begin
+    Result := s;
+    Exit;
+  end;
+
+  for i := n to Length(s) - 1 do
+    if s[i] = #13 then
+      if s[i + 1] = #10 then
+      begin
+        s[i] := #4;
+        s[i + 1] := #5;
+        Continue;
+      end;
+
+  Result := s;
+end;
+
+
+procedure ExecPlugin(ARepoPath: Pointer;
+                     ARepoPathLen: DWord;
+                     ACommitID: Pointer;
+                     ACommitIDLen: DWord;
+                     ATimestamp: Pointer;
+                     ATimestampLen: DWord;
+                     AAuthor: Pointer;
+                     AAuthorLen: DWord;
+                     AEMail: Pointer;
+                     AEMailLen: DWord;
+                     ACommitMessage: Pointer;
+                     ACommitMessageLen: DWord;
+                     AListOfFiles: Pointer;
+                     AListOfFilesLen: DWord;
+                     APluginOutputCallback: TPluginOutputCallback
+                    ); cdecl;
+var
+  PluginOutput, Request, Response: string;
+  RepoPath, CommitID, Timestamp, Author, EMail, CommitMessage, ListOfFiles: string;
+begin
+  PluginOutput := 'Hello from plugin.';
+  if ErrOutput > '' then
+    PluginOutput := PluginOutput + #13#10 + ErrOutput;
+
+  try
+    SetLength(RepoPath, ARepoPathLen);
+    Move(ARepoPath^, RepoPath[1], ARepoPathLen);
+
+    SetLength(CommitID, ACommitIDLen);
+    Move(ACommitID^, CommitID[1], ACommitIDLen);
+
+    SetLength(Timestamp, ATimestampLen);
+    Move(ATimestamp^, Timestamp[1], ATimestampLen);
+
+    SetLength(Author, AAuthorLen);
+    Move(AAuthor^, Author[1], AAuthorLen);
+
+    SetLength(EMail, AEMailLen);
+    Move(AEMail^, EMail[1], AEMailLen);
+
+    SetLength(CommitMessage, ACommitMessageLen);
+    Move(ACommitMessage^, CommitMessage[1], ACommitMessageLen);
+
+    SetLength(ListOfFiles, AListOfFilesLen);
+    Move(AListOfFiles^, ListOfFiles[1], AListOfFilesLen);
+
+    ListOfFiles := FastReplace_ReturnTo45(ListOfFiles);
+
+    Request := 'http://' + CAddress + ':' + CPort + '/ExecPlugin' + '?' +
+               'RepoPath=' + RepoPath + '&' +
+               'CommitID=' + CommitID + '&' +
+               'Timestamp=' + Timestamp + '&' +
+               'Author=' + Author + '&' +
+               'EMail=' + EMail + '&' +
+               'CommitMessage=' + CommitMessage + '&' +
+               'ListOfFiles=' + ListOfFiles;
+
+    try
+      Response := GIdHTTP.Get(Request);
+
+      if PluginOutput > '' then
+        PluginOutput := #13#10;
+
+      PluginOutput := PluginOutput + Response;
+    finally
+      APluginOutputCallback(@PluginOutput[1], Length(PluginOutput));
+    end;
+  except
+    on E: Exception do
+    begin
+      PluginOutput := PluginOutput + #13#10 + E.Message;
+      APluginOutputCallback(@PluginOutput[1], Length(PluginOutput));
+    end;
+  end;
+end;
+
+
+procedure DonePlugin; cdecl;
+begin
+  try
+    GIdHTTP.Disconnect(True);
+  except
+  end;
+end;
+
+
+exports
+  InitPlugin,
+  ExecPlugin,
+  DonePlugin;
+
+begin
+  GIdHTTP := nil;
+  ErrOutput := '';
+end.
+
